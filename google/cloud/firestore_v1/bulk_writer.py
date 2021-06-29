@@ -38,6 +38,7 @@ class BulkWriterScheduler:
     Handles the purely time-based limits on how many batches can be sent
     within a given period of time (as spelled out by the `_rate_limiter`).
     """
+
     def __init__(self, rate_limiter: Optional[RateLimiter] = None):
         self._rate_limiter = rate_limiter or RateLimiter()
 
@@ -110,8 +111,10 @@ class AsyncBulkWriterMixin:
         
         Use on entrypoint methods for code paths that *must* be parallelized.
         """
+
         def wrapper(self):
             return self._executor.submit(lambda: fn(self))
+
         return wrapper
 
     @_executor_only
@@ -137,7 +140,7 @@ class AsyncBulkWriterMixin:
             # Block until there is breathing room in the in-flight queue, which
             # is fine since we are already parallelized by the executor.
             time.sleep(0.01)
-        
+
         # Once all prerequisities are satisfied, we can finally send.
         self._send_batch(_batch)
 
@@ -157,7 +160,7 @@ class AsyncBulkWriterMixin:
         # Update bookkeeping totals
         self._total_batches_sent += 1
         self._total_write_operations += _len_batch
-        
+
         # The successful sending of a batch frees up the BulkWriter to send
         # another one, so here we restart the process
         if self._executor and not self._executor._shutdown:
@@ -165,7 +168,9 @@ class AsyncBulkWriterMixin:
 
         self._process_response(batch, response)
 
-    def _process_response(self, batch: BulkWriteBatch, response: BatchWriteResponse) -> NoReturn:
+    def _process_response(
+        self, batch: BulkWriteBatch, response: BatchWriteResponse
+    ) -> NoReturn:
         batch_references: List[BaseDocumentReference] = list(
             batch._document_references.values(),
         )
@@ -176,6 +181,7 @@ class AsyncBulkWriterMixin:
 
     def _send(self, batch: BulkWriteBatch) -> BatchWriteResponse:
         return self._sender.send(batch)
+
 
 class BulkWriter(AsyncBulkWriterMixin):
     """
@@ -220,7 +226,8 @@ class BulkWriter(AsyncBulkWriterMixin):
 
     batch_size: int = 20
 
-    def __init__(self,
+    def __init__(
+        self,
         client: Optional[BaseClient] = None,
         scheduler: Optional[BulkWriterScheduler] = None,
     ):
@@ -231,8 +238,10 @@ class BulkWriter(AsyncBulkWriterMixin):
         self._batch: BulkWriteBatch = self._reset_batch()
         self._queued_batches = collections.deque([])
         self._is_open = True
-        
-        self._success_callback: Optional[Callable[[BaseDocumentReference, WriteResult], NoReturn]] = None
+
+        self._success_callback: Optional[
+            Callable[[BaseDocumentReference, WriteResult], NoReturn]
+        ] = None
         self._error_callback: Optional[Callable] = None
 
         self._in_flight_documents: int = 0
@@ -247,7 +256,7 @@ class BulkWriter(AsyncBulkWriterMixin):
 
     def _reset_executor(self):
         self._executor = self._instantiate_executor()
-    
+
     def _instantiate_executor(self):
         return concurrent.futures.ThreadPoolExecutor()
 
@@ -286,7 +295,7 @@ class BulkWriter(AsyncBulkWriterMixin):
         """
         if len(self._batch) >= self.batch_size:
             self._enqueue_current_batch()
-    
+
     def _enqueue_current_batch(self):
         """Adds the current batch to the back of the sending line, resets the
         local instance, and begins the process of actually sending whatever
@@ -305,11 +314,9 @@ class BulkWriter(AsyncBulkWriterMixin):
 
         # Lastly, trigger the sending of the batch in the front of the line.
         self._send_next_batch_when_ready()
-    
+
     def create(
-        self,
-        reference: BaseDocumentReference,
-        document_data: Dict,
+        self, reference: BaseDocumentReference, document_data: Dict,
     ) -> NoReturn:
         """Adds a `create` pb to the in-progress batch.
         
@@ -329,7 +336,7 @@ class BulkWriter(AsyncBulkWriterMixin):
                 Raw data to save to the server.
         """
         self._verify_not_closed()
-        
+
         if reference in self._batch:
             self._enqueue_current_batch()
 
@@ -339,7 +346,7 @@ class BulkWriter(AsyncBulkWriterMixin):
     def delete(
         self,
         reference: BaseDocumentReference,
-        option: Optional[_helpers.WriteOption] = None
+        option: Optional[_helpers.WriteOption] = None,
     ) -> NoReturn:
         """Adds a `delete` pb to the in-progress batch.
         
@@ -359,7 +366,7 @@ class BulkWriter(AsyncBulkWriterMixin):
                 Optional flag to modify the nature of this write.
         """
         self._verify_not_closed()
-        
+
         if reference in self._batch:
             self._enqueue_current_batch()
 
@@ -393,7 +400,7 @@ class BulkWriter(AsyncBulkWriterMixin):
                 the supplied data.
         """
         self._verify_not_closed()
-        
+
         if reference in self._batch:
             self._enqueue_current_batch()
 
@@ -426,14 +433,16 @@ class BulkWriter(AsyncBulkWriterMixin):
                 Optional flag to modify the nature of this write.
         """
         self._verify_not_closed()
-        
+
         if reference in self._batch:
             self._enqueue_current_batch()
 
         self._batch.update(reference, field_updates, option=option)
         self._maybe_enqueue_current_batch()
 
-    def on_write_result(self, callback: Callable[[BaseDocumentReference, WriteResult], NoReturn]) -> NoReturn:
+    def on_write_result(
+        self, callback: Callable[[BaseDocumentReference, WriteResult], NoReturn]
+    ) -> NoReturn:
         """Sets a callback that will be invoked once for every successful operation."""
         self._success_callback = callback
 

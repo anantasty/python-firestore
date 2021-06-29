@@ -50,19 +50,21 @@ class NoSendBulkWriter(BulkWriter):
                 for el in batch._document_references.values()
             ]
         )
-    
-    def _process_response(self, batch: BulkWriteBatch, response: BatchWriteResponse) -> NoReturn:
+
+    def _process_response(
+        self, batch: BulkWriteBatch, response: BatchWriteResponse
+    ) -> NoReturn:
         super()._process_response(batch, response)
         self._responses.append((batch, response,))
-    
+
     def _instantiate_executor(self):
         return FakeThreadPoolExecutor()
-
 
 
 class _SyncClientMixin:
     """Mixin which helps a `_BaseBulkWriterTests` subclass simulate usage of
     synchronous Clients, Collections, DocumentReferences, etc."""
+
     def _get_client_class(self) -> Type:
         return Client
 
@@ -70,6 +72,7 @@ class _SyncClientMixin:
 class _AsyncClientMixin:
     """Mixin which helps a `_BaseBulkWriterTests` subclass simulate usage of
     AsyncClients, AsyncCollections, AsyncDocumentReferences, etc."""
+
     def _get_client_class(self) -> Type:
         return AsyncClient
 
@@ -79,17 +82,15 @@ class _BaseBulkWriterTests:
         self.client: BaseClient = self._get_client_class()()
 
     def _get_document_reference(
-        self,
-        collection_name: Optional[str] = 'col',
-        id: Optional[str] = None,
+        self, collection_name: Optional[str] = "col", id: Optional[str] = None,
     ) -> Type:
         return self.client.collection(collection_name).document(id)
 
     def _doc_iter(self, num: int, ids: Optional[List[str]] = None):
         for _ in range(num):
             id: Optional[str] = ids[_] if ids else None
-            yield self._get_document_reference(id=id), {"doesn't": 'matter'}
-        
+            yield self._get_document_reference(id=id), {"doesn't": "matter"}
+
     def _verify_bw_activity(self, bw: BulkWriter, counts: List[Tuple[int, int]]):
         """
         Args:
@@ -106,7 +107,7 @@ class _BaseBulkWriterTests:
         for _, resp in bw._responses:
             docs_count.setdefault(len(resp.write_results), 0)
             docs_count[len(resp.write_results)] += 1
-        
+
         self.assertEqual(len(docs_count), len(counts))
         for size, num_sent in counts:
             self.assertEqual(docs_count[size], num_sent)
@@ -122,7 +123,7 @@ class _BaseBulkWriterTests:
 
     def test_separates_same_document(self):
         bw = NoSendBulkWriter(self.client)
-        for ref, data in self._doc_iter(2, ['same-id', 'same-id']):
+        for ref, data in self._doc_iter(2, ["same-id", "same-id"]):
             bw.create(ref, data)
         bw.flush()
         # Seeing the same document twice should lead to separate batches
@@ -130,7 +131,7 @@ class _BaseBulkWriterTests:
 
     def test_separates_same_document_different_operation(self):
         bw = NoSendBulkWriter(self.client)
-        for ref, data in self._doc_iter(1, ['same-id']):
+        for ref, data in self._doc_iter(1, ["same-id"]):
             bw.create(ref, data)
             bw.set(ref, data)
         bw.flush()
@@ -141,25 +142,28 @@ class _BaseBulkWriterTests:
 class TestSyncBulkWriter(_SyncClientMixin, _BaseBulkWriterTests, unittest.TestCase):
     """All BulkWriters are opaquely async, but this one simulates a BulkWriter
     dealing with synchronous DocumentReferences."""
+
     pass
 
 
-class TestAsyncBulkWriter(_AsyncClientMixin, _BaseBulkWriterTests, ):
+class TestAsyncBulkWriter(
+    _AsyncClientMixin, _BaseBulkWriterTests,
+):
     """All BulkWriters are opaquely async, but this one simulates a BulkWriter
     dealing with AsyncDocumentReferences."""
+
     pass
 
 
 class TestBulkWriterScheduler(unittest.TestCase):
-
     @mock.patch.object(google.cloud.firestore_v1.rate_limiter, "utcnow")
     def test_max_in_flight(self, mocked_now):
         six_minutes_ago = datetime.datetime.utcnow() - datetime.timedelta(minutes=6)
         mocked_now.return_value = six_minutes_ago
-        
+
         scheduler = BulkWriterScheduler()
         self.assertEqual(scheduler.max_in_flight, 500)
-        
+
         scheduler.request_send(20)
 
         now = datetime.datetime.utcnow()
